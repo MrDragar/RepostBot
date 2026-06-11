@@ -1,18 +1,23 @@
 import json
 import os
 import pandas as pd
-from typing import List, Tuple
+from typing import List, Tuple, Any
 
 
 class FileParseError(Exception):
     pass
 
 
+# Ключи, по которым ищем ID в словарях (JSON)
+ID_KEYS = {
+    "userid", "user_id", "user", "users", "id",
+    "tg_id", "tgid", "telegram_id", "telegramid", "telegram",
+    "chat_id", "chatid", "chat",
+    "account", "member", "subscriber", "recipient",
+}
+
+
 async def parse_user_ids(file_path: str) -> Tuple[List[int], List[str]]:
-    """
-    Парсит ID пользователей из JSON / CSV / Excel / TXT.
-    Возвращает список уникальных int и список ошибок парсинга.
-    """
     ext = os.path.splitext(file_path)[1].lower()
     ids: List[int] = []
     errors: List[str] = []
@@ -21,19 +26,8 @@ async def parse_user_ids(file_path: str) -> Tuple[List[int], List[str]]:
         if ext == ".json":
             with open(file_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            # Поддерживаем: [123, 456], {"users": [...]}, {"ids": [...]}
-            if isinstance(data, list):
-                items = data
-            elif isinstance(data, dict):
-                items = (
-                    data.get("users")
-                    or data.get("ids")
-                    or data.get("data")
-                    or data.get("userIds")
-                    or []
-                )
-            else:
-                raise FileParseError("Неизвестная структура JSON")
+
+            items = _extract_items_from_json(data)
 
         elif ext == ".csv":
             df = pd.read_csv(file_path)
@@ -74,11 +68,55 @@ async def parse_user_ids(file_path: str) -> Tuple[List[int], List[str]]:
         raise FileParseError(f"Ошибка парсинга: {e}")
 
 
+def _extract_items_from_json(data: Any) -> List[Any]:
+    """
+    Извлекает список ID-значений из любого JSON.
+    Поддерживает:
+      - [1, 2, 3]                               → список чисел
+      - [{"userId":1}, {"userId":2}]            → список объектов
+      - {"users": [1,2,3]}                      → объект со списком
+      - {"data": [{"user_id":1}, ...]}          → объект со списком объектов
+    """
+    # Случай 1: корень — список
+    if isinstance(data, list):
+        # Если элементы — словари, достаём ID из них
+        if data and isinstance(data[0], dict):
+            return [_extract_id_from_dict(obj) for obj in data]
+        # Иначе — просто список значений
+        return data
+
+    # Случай 2: корень — объект
+    if isinstance(data, dict):
+        # Ищем известные ключи, в которых лежит список
+        for key in ("users", "ids", "data", "userIds", "members", "subscribers", "results", "items"):
+            if key in data and isinstance(data[key], list):
+                inner = data[key]
+                if inner and isinstance(inner[0], dict):
+                    return [_extract_id_from_dict(obj) for obj in inner]
+                return inner
+        # Если ничего не нашли — пробуем достать ID прямо из корневого объекта
+        return [_extract_id_from_dict(data)]
+
+    raise FileParseError("Ожидался массив или объект")
+
+
+def _extract_id_from_dict(obj: dict) -> Any:
+    """
+    Ищет поле с ID внутри словаря.
+    Подходит для: {"userId": 123}, {"user_id": 123}, {"id": 123} и т.п.
+    """
+    if not isinstance(obj, dict):
+        return obj
+    # Ищем по нормализованному имени ключа
+    for key, value in obj.items():
+        if str(key).strip().lower() in ID_KEYS:
+            return value
+    raise FileParseError(f"В объекте не найдено поле с ID: {list(obj.keys())}")
+
+
 def _find_id_column(df: pd.DataFrame) -> pd.Series:
     """
-    Ищет колонку с ID пользователей.
-    Поддерживаются варианты (регистр не важен):
-    id, userId, user_id, userid, tg_id, telegram_id, chat_id, user, tg, account и др.
+    Ищет колонку с ID в DataFrame.
     """
     aliases = {
         "id", "user_id", "userid", "user", "users",
@@ -89,5 +127,4 @@ def _find_id_column(df: pd.DataFrame) -> pd.Series:
     for col in df.columns:
         if str(col).strip().lower() in aliases:
             return df[col]
-    # Если ничего не нашли — берём первую колонку
     return df.iloc[:, 0]
