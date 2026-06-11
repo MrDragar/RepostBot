@@ -1,18 +1,18 @@
-FROM python:3.11-slim
+services:
+  broadcast-bot:
+    build: .
+    container_name: broadcast_bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./temp:/app/temp          # для хранения файлов рассылки
+      - ./logs:/app/logs          # опционально: логи
+    environment:
+      - TZ=Europe/Moscow
+    networks:
+      - bot_network
 
-WORKDIR /app
-
-# Установка системных зависимостей для pandas/openpyxl
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    libffi-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-COPY . .
-
-RUN mkdir -p temp
-
-CMD ["python", "-m", "bot.main"]
+networks:
+  bot_network:
+    driver: bridge
