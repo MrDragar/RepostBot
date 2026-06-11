@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     proxy_url: str | None = Field(alias="PROXY_URL", default=None)
     messages_per_second: int = Field(alias="MESSAGES_PER_SECOND", default=25)
     temp_dir: str = Field(alias="TEMP_DIR", default="./temp")
+    source_chat_id: str = Field(alias="SOURCE_CHAT_ID")
 
 
 settings = Settings()

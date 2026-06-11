@@ -19,39 +19,41 @@ router = Router(name="broadcast")
 
 # ---------- ШАГ 1: приём сообщения для рассылки ----------
 @router.message(StateFilter(BroadcastStates.waiting_for_message))
-async def receive_message(message: Message, state: FSMContext):
-    # Строго проверяем, что сообщение именно ПЕРЕСЛАНО (forward)
-    if not message.forward_from_chat and not message.forward_from:
-        await message.answer(
-            "⚠️ Это не пересланное сообщение!\n\n"
-            "Пожалуйста, сначала отправь пост боту-рассыльщику (или в канал, где он есть), "
-            "а затем <b>перешли</b> его мне. Только так бот-рассыльщик сможет его легально скопировать."
-        )
+async def receive_message(message: Message, state: FSMContext, bot: Bot):
+    """
+    Принимает пост, автоматически пересылает его в SOURCE_CHAT_ID,
+    чтобы бот-рассыльщик потом мог его оттуда скопировать.
+    """
+    # Игнорируем команды, если пользователь случайно ввёл /start на этом этапе
+    if message.text and message.text.startswith('/'):
         return
 
-    # Извлекаем ID чата и сообщения ОРИГИНАЛА
-    if message.forward_from_chat:
-        # Если переслано из канала или группы
-        from_chat_id = message.forward_from_chat.id
-    else:
-        # Если переслано из личного чата с другим пользователем/ботом
-        from_chat_id = message.forward_from.id
+    try:
+        # 1. Пересылаем сообщение в общий чат, где есть оба бота
+        forwarded_msg = await message.forward(chat_id=settings.source_chat_id)
 
-    message_id = message.forward_from_message_id
+        # 2. Сохраняем координаты сообщения именно в общем чате
+        message_data = {
+            "type": "copy",
+            "from_chat_id": settings.source_chat_id,
+            "message_id": forwarded_msg.message_id,
+        }
+        await state.update_data(message_data=message_data)
 
-    message_data = {
-        "type": "copy",
-        "from_chat_id": from_chat_id,
-        "message_id": message_id,
-    }
+        await message.answer(
+            "✅ Пост принят и сохранён в общем чате.\n\n"
+            "Теперь отправь файл с ID пользователей (JSON, CSV, XLSX или TXT)."
+        )
+        await state.set_state(BroadcastStates.waiting_for_file)
 
-    await state.update_data(message_data=message_data)
-    
-    await message.answer(
-        "✅ Пост принят и привязан к источнику.\n"
-        "Теперь отправь файл с ID пользователей (JSON, CSV, XLSX, TXT)."
-    )
-    await state.set_state(BroadcastStates.waiting_for_file)
+    except Exception as e:
+        await message.answer(
+            f"❌ Не удалось переслать сообщение в исходный чат (<code>{settings.source_chat_id}</code>).\n\n"
+            f"<b>Проверь:</b>\n"
+            f"1. Этот бот добавлен в этот чат/канал.\n"
+            f"2. Этот бот является <b>администратором</b> этого чата/канала (с правом публикации).\n\n"
+            f"Техническая ошибка: <code>{e}</code>"
+        )
 
 
 # ---------- ШАГ 2: приём файла с ID ----------
