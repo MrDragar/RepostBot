@@ -27,7 +27,7 @@ async def receive_message(message: Message, state: FSMContext, bot: Bot):
 
     # Сохраняем сообщение "для истории" — пересылаем обратно, чтобы показать, что принято
     await message.answer("✅ Пост принят. Теперь отправь файл с ID пользователей.")
-    await message.copy_message(chat_id=message.chat.id, from_chat_id=message.chat.id, message_id=message.message_id)  # для наглядности (опционально)
+    await message.bot.copy_message(chat_id=message.chat.id, from_chat_id=message.chat.id, message_id=message.message_id)  # для наглядности (опционально)
 
     await state.set_state(BroadcastStates.waiting_for_file)
 
