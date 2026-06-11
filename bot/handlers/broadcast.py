@@ -27,7 +27,7 @@ async def receive_message(message: Message, state: FSMContext, bot: Bot):
 
     # Сохраняем сообщение "для истории" — пересылаем обратно, чтобы показать, что принято
     await message.answer("✅ Пост принят. Теперь отправь файл с ID пользователей.")
-    await message.forward(chat_id=message.chat.id)  # для наглядности (опционально)
+    await message.copy(chat_id=message.chat.id, from_chat_id=message.chat.id, message_id=message.id)  # для наглядности (опционально)
 
     await state.set_state(BroadcastStates.waiting_for_file)
 
@@ -35,7 +35,7 @@ async def receive_message(message: Message, state: FSMContext, bot: Bot):
 # ---------- ШАГ 2: приём файла с ID ----------
 
 @router.message(StateFilter(BroadcastStates.waiting_for_file), F.document)
-async def receive_file(message: Message, state: FSMContext):
+async def receive_file(message: Message, state: FSMContext, bot: Bot):
     document = message.document
     ext = os.path.splitext(document.file_name)[1].lower()
     if ext not in (".json", ".csv", ".xlsx", ".xls", ".txt"):
@@ -44,18 +44,22 @@ async def receive_file(message: Message, state: FSMContext):
 
     os.makedirs(settings.temp_dir, exist_ok=True)
     temp_path = os.path.join(settings.temp_dir, f"{uuid.uuid4()}{ext}")
-    await document.download(destination_file=temp_path)
+
+    # Правильный способ скачивания в aiogram 3.x
+    await bot.download(document, destination=temp_path)
 
     try:
         ids, errors = await parse_user_ids(temp_path)
     except FileParseError as e:
         await message.answer(f"❌ Ошибка парсинга файла:\n<code>{e}</code>")
-        os.remove(temp_path)
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
         return
 
     if not ids:
         await message.answer("❌ В файле не найдено ни одного валидного ID.")
-        os.remove(temp_path)
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
         return
 
     await state.update_data(file_path=temp_path, user_ids=ids)
