@@ -30,7 +30,7 @@ async def receive_message(message: Message, state: FSMContext, bot: Bot):
 
     try:
         # 1. Пересылаем сообщение в общий чат, где есть оба бота
-        forwarded_msg = await message.forward(chat_id=settings.source_chat_id)
+        forwarded_msg = await message.copy_to(chat_id=settings.source_chat_id)
 
         # 2. Сохраняем координаты сообщения именно в общем чате
         message_data = {
