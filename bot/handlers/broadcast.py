@@ -178,11 +178,10 @@ async def confirm_broadcast(callback: CallbackQuery, state: FSMContext, bot: Bot
 
 async def _extract_message_data(message: Message, bot: Bot) -> dict:
     """
-    Сохраняет метаданные сообщения так, чтобы потом его можно было
-    отправить другим пользователям. Использует copy_message, если это forward,
-    либо сохраняет файлы по file_id.
+    Возвращает данные ТОЛЬКО для copy_message.
+    Это самый надёжный способ: сохраняет всё форматирование, медиагруппы, кнопки.
     """
-    # Если сообщение переслано — используем copy_message (самый надёжный способ)
+    # Если сообщение переслано из канала/чата — копируем оттуда (бот должен быть там участником)
     if message.forward_from_chat and message.forward_from_message_id:
         return {
             "type": "copy",
@@ -190,50 +189,16 @@ async def _extract_message_data(message: Message, bot: Bot) -> dict:
             "message_id": message.forward_from_message_id,
         }
 
-    if message.photo:
+    # Если переслано из личного чата с другим пользователем
+    if message.forward_from and message.forward_from_message_id:
         return {
-            "type": "photo",
-            "photo": message.photo[-1].file_id,
-            "caption": message.caption or "",
-            "parse_mode": message.parse_mode,
-        }
-    if message.document:
-        return {
-            "type": "document",
-            "document": message.document.file_id,
-            "caption": message.caption or "",
-            "parse_mode": message.parse_mode,
-        }
-    if message.video:
-        return {
-            "type": "video",
-            "video": message.video.file_id,
-            "caption": message.caption or "",
-            "parse_mode": message.parse_mode,
-        }
-    if message.audio:
-        return {
-            "type": "audio",
-            "audio": message.audio.file_id,
-            "caption": message.caption or "",
-            "parse_mode": message.parse_mode,
-        }
-    if message.voice:
-        return {
-            "type": "voice",
-            "voice": message.voice.file_id,
-            "caption": message.caption or "",
-            "parse_mode": message.parse_mode,
-        }
-    if message.text:
-        return {
-            "type": "text",
-            "text": message.text,
-            "parse_mode": message.parse_mode,
+            "type": "copy",
+            "from_chat_id": message.forward_from.id,
+            "message_id": message.forward_from_message_id,
         }
 
-    # Fallback — copy_message через "избранное" пользователя
-    # (если ничего не подошло — копируем оригинал)
+    # Обычное сообщение — берём из текущего чата с ботом.
+    # copy_message умеет копировать из чата A в чат B, даже если это приватный чат.
     return {
         "type": "copy",
         "from_chat_id": message.chat.id,

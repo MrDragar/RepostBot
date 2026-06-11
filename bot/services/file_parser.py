@@ -1,17 +1,17 @@
 import json
 import os
 import pandas as pd
-from typing import List
+from typing import List, Tuple
 
 
 class FileParseError(Exception):
     pass
 
 
-async def parse_user_ids(file_path: str) -> List[int]:
+async def parse_user_ids(file_path: str) -> Tuple[List[int], List[str]]:
     """
     Парсит ID пользователей из JSON / CSV / Excel / TXT.
-    Возвращает список int и список ошибок.
+    Возвращает список уникальных int и список ошибок парсинга.
     """
     ext = os.path.splitext(file_path)[1].lower()
     ids: List[int] = []
@@ -21,11 +21,17 @@ async def parse_user_ids(file_path: str) -> List[int]:
         if ext == ".json":
             with open(file_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            # Поддерживаем форматы: [123, 456], [{"id": 123}, ...], {"users": [...]}
+            # Поддерживаем: [123, 456], {"users": [...]}, {"ids": [...]}
             if isinstance(data, list):
                 items = data
             elif isinstance(data, dict):
-                items = data.get("users") or data.get("ids") or data.get("data") or []
+                items = (
+                    data.get("users")
+                    or data.get("ids")
+                    or data.get("data")
+                    or data.get("userIds")
+                    or []
+                )
             else:
                 raise FileParseError("Неизвестная структура JSON")
 
@@ -44,14 +50,13 @@ async def parse_user_ids(file_path: str) -> List[int]:
         else:
             raise FileParseError(f"Неподдерживаемый формат файла: {ext}")
 
-        # Преобразование и фильтрация
         for item in items:
             try:
                 uid = int(str(item).strip())
                 if uid > 0:
                     ids.append(uid)
                 else:
-                    errors.append(f"Отрицательный ID: {item}")
+                    errors.append(f"Отрицательный/нулевой ID: {item}")
             except (ValueError, TypeError):
                 errors.append(f"Некорректный ID: {item}")
 
@@ -70,9 +75,19 @@ async def parse_user_ids(file_path: str) -> List[int]:
 
 
 def _find_id_column(df: pd.DataFrame) -> pd.Series:
-    """Ищет колонку с ID пользователей."""
+    """
+    Ищет колонку с ID пользователей.
+    Поддерживаются варианты (регистр не важен):
+    id, userId, user_id, userid, tg_id, telegram_id, chat_id, user, tg, account и др.
+    """
+    aliases = {
+        "id", "user_id", "userid", "user", "users",
+        "tg_id", "tgid", "telegram_id", "telegramid", "telegram",
+        "chat_id", "chatid", "chat",
+        "account", "member", "subscriber", "recipient",
+    }
     for col in df.columns:
-        if col.lower() in ("id", "user_id", "userid", "tg_id", "telegram_id", "chat_id"):
+        if str(col).strip().lower() in aliases:
             return df[col]
-    # Берём первую колонку
+    # Если ничего не нашли — берём первую колонку
     return df.iloc[:, 0]

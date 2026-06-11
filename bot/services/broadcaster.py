@@ -89,56 +89,16 @@ async def run_broadcast(
 
 
 async def _send_to_user(bot: Bot, user_id: int, message_data: dict):
-    """Отправляет одно сообщение пользователю."""
+    """
+    Отправляет сообщение пользователю через copy_message.
+    copy_message работает для любого типа: текст, фото, видео, стикер, кружочек, медиагруппа.
+    """
     msg_type = message_data.get("type")
+    if msg_type != "copy":
+        raise ValueError(f"Поддерживается только copy_message, получен тип: {msg_type}")
 
-    if msg_type == "text":
-        await bot.send_message(user_id, message_data["text"], parse_mode=message_data.get("parse_mode"))
-    elif msg_type == "photo":
-        await bot.send_photo(
-            user_id,
-            message_data["photo"],
-            caption=message_data.get("caption"),
-            parse_mode=message_data.get("parse_mode"),
-        )
-    elif msg_type == "document":
-        await bot.send_document(
-            user_id,
-            message_data["document"],
-            caption=message_data.get("caption"),
-            parse_mode=message_data.get("parse_mode"),
-        )
-    elif msg_type == "video":
-        await bot.send_video(
-            user_id,
-            message_data["video"],
-            caption=message_data.get("caption"),
-            parse_mode=message_data.get("parse_mode"),
-        )
-    elif msg_type == "audio":
-        await bot.send_audio(
-            user_id,
-            message_data["audio"],
-            caption=message_data.get("caption"),
-            parse_mode=message_data.get("parse_mode"),
-        )
-    elif msg_type == "copy":
-        # Самый надёжный способ: копируем сообщение через copy_message
-        await bot.copy_message(
-            user_id,
-            from_chat_id=message_data["from_chat_id"],
-            message_id=message_data["message_id"],
-        )
-    else:
-        raise ValueError(f"Неизвестный тип: {msg_type}")
-
-
-def _make_session():
-    """Создаёт aiohttp сессию с SOCKS-прокси."""
-    from aiohttp import ClientSession
-    if settings.proxy_url:
-        from aiohttp_socks import ProxyConnector
-        connector = ProxyConnector.from_url(settings.proxy_url)
-    else:
-        connector = None
-    return ClientSession(connector=connector)
+    await bot.copy_message(
+        chat_id=user_id,
+        from_chat_id=message_data["from_chat_id"],
+        message_id=message_data["message_id"],
+    )
