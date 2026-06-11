@@ -208,3 +208,4 @@ async def _extract_message_data(message: Message, bot: Bot) -> dict:
         "from_chat_id": message.chat.id,
         "message_id": message.message_id,
     }
+
