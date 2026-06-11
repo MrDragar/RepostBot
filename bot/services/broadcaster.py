@@ -7,6 +7,7 @@ from typing import List, Callable, Awaitable
 from aiogram import Bot
 from aiogram.types import FSInputFile
 from aiogram.exceptions import TelegramRetryAfter, TelegramForbiddenError, TelegramBadRequest
+from aiogram.client.session.aiohttp import AiohttpSession
 
 from bot.config import settings
 
@@ -102,3 +103,9 @@ async def _send_to_user(bot: Bot, user_id: int, message_data: dict):
         from_chat_id=message_data["from_chat_id"],
         message_id=message_data["message_id"],
     )
+
+def _make_session():
+    session = AiohttpSession()
+    if settings.proxy_url:
+        session=AiohttpSession(proxy=settings.proxy_url)
+    return session
